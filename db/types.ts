@@ -6,7 +6,7 @@ export type DbMessage = {
         price:string,
         quantity:string,
         quoteQuantity:string,
-        timeStamp:number,
+        timestamp:number,
         market:string,
     }
 } | {

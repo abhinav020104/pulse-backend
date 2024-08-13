@@ -11,9 +11,9 @@ client.connect()
 
 
 async function refreshViews(){
-    await client.query("REFRESH MATERIALIZED VIEW klines_1m");
-    await client.query("REFRESH MATERIALIZED VIEW klines_1h");
-    await client.query("REFRESH MATERIALIZED VIEW klines_1w");
+    await client.query("REFRESH MATERIALIZED VIEW sol_1m");
+    await client.query("REFRESH MATERIALIZED VIEW sol_1h");
+    await client.query("REFRESH MATERIALIZED VIEW sol_1w");
 
     console.log("Materialized Views refreshed Successfully");
 }
