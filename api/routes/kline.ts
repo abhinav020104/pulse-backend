@@ -9,7 +9,7 @@ const pgClient = new Client({
     password:"your_password",
     port:5432,
 });
-
+    
 pgClient.connect();
 
 
@@ -20,13 +20,13 @@ klineRouter.get("/" , async(req , res) => {
     let query;
     switch(interval){
         case "1m" :
-            query = "SELECT * FROM sol_1m WHERE bucket >= $1 AND bucket <= $2";
+            query = `SELECT * FROM sol_1m WHERE "end" >= $1 AND "end" <= $2`;
             break;
         case '1h':
-            query = `SELECT * FROM sol_1h WHERE  bucket >= $1 AND bucket <= $2`;
+            query = `SELECT * FROM sol_1h WHERE  "end" >= $1 AND "end" <= $2`;
             break;
         case '1w':
-            query = `SELECT * FROM sol_1w WHERE bucket >= $1 AND bucket <= $2`;
+            query = `SELECT * FROM sol_1w WHERE "end" >= $1 AND "end" <= $2`;
             break;
         default:
             return res.status(400).send('Invalid interval');
@@ -39,7 +39,7 @@ klineRouter.get("/" , async(req , res) => {
             //@ts-ignore
             close: x.close,
             //@ts-ignore
-            end: x.bucket,
+            end: x.end,
             //@ts-ignore
             high: x.high,
             //@ts-ignore

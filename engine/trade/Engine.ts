@@ -3,9 +3,18 @@ import { RedisManager } from "../RedisManager";
 import { ORDER_UPDATE, TRADE_ADDED } from "../types/index";
 import { CANCEL_ORDER, CREATE_ORDER, GET_DEPTH, GET_OPEN_ORDERS, MessageFromApi, ON_RAMP } from "../types/fromApi";
 import { Fill, Order, OrderBook } from "./OrderBook";
-
-
+import {Client} from "pg"
 export const BASE_CURRENCY = "USD";
+
+const pgClient = new Client({
+    user: "your_user",
+    host: "localhost",
+    database: "my_database",
+    password: "your_password",
+    port: 5432,
+});
+
+pgClient.connect();
 
 interface UserBalance{
     [key:string]:{
@@ -17,8 +26,9 @@ interface UserBalance{
 export class Engine{
     private orderBook: OrderBook[] = [];
     private balances : Map<string , UserBalance>= new Map();
-
-    constructor(){
+    private pgClient:any
+    constructor(){  
+        this.pgClient = pgClient;
         console.log("constructor called");
         let snapshot = null
         try{
@@ -35,13 +45,13 @@ export class Engine{
             this.orderBook = snapshotSnapshot.orderBook.map((o: any) => new OrderBook(o.baseAsset, o.bids, o.asks, o.lastTradeId, o.currentPrice));
             this.balances = new Map(snapshotSnapshot.balances);
         } else {
-            console.log("here"); 
+            // console.log("here"); 
             this.orderBook = [new OrderBook(`SOL`, [], [], 0, 0)];
             this.setBaseBalances();
         }
         setInterval(() => {
             this.saveSnapshot();
-        }, 1);
+        }, 30000);
     }
 
     saveSnapshot() {
@@ -203,10 +213,11 @@ export class Engine{
         }
         
         const { fills, executedQty } = orderbook.addOrder(order);
+        this.sendUpdatedDepthAt(price , market);
         this.updateBalance(userId, baseAsset, quoteAsset, side, fills, executedQty);
         this.createDbTrades(fills, market, userId);
         this.updateDbOrders(order, executedQty, fills, market);
-        this.publisWsDepthUpdates(fills, price, side, market);
+        this.publishWsDepthUpdates(fills, price, side, market);
         this.publishWsTrades(fills, userId, market);
         RedisManager.getInstance().publishMessage(`ticker@${market}`,{
             stream:`{ticker@${market}}`,
@@ -216,9 +227,11 @@ export class Engine{
                 s:orderbook.baseAsset
             }
         })
+        setTimeout(()=>{
+            this.pollDatabase(market)
+        })
         return { executedQty, fills, orderId: order.orderId };
     }
-
     updateDbOrders(order: Order, executedQty: number, fills: Fill[], market: string) {
         RedisManager.getInstance().pushMessage({
             type: ORDER_UPDATE,
@@ -282,8 +295,8 @@ export class Engine{
             return;
         }
         const depth = orderbook.getDepth();
-        const updatedBids = depth?.bids.filter(x => x[0] === price);
-        const updatedAsks = depth?.asks.filter(x => x[0] === price);
+        const updatedBids = depth?.bids.filter(x => (x[0] === price));
+        const updatedAsks = depth?.asks.filter(x => (x[0] === price));
         
         RedisManager.getInstance().publishMessage(`depth@${market}`, {
             stream: `depth@${market}`,
@@ -295,39 +308,42 @@ export class Engine{
         });
     }
 
-    publisWsDepthUpdates(fills: Fill[], price: string, side: "buy" | "sell", market: string) {
+    publishWsDepthUpdates(fills: Fill[], price: string, side: "buy" | "sell", market: string) {
         const orderbook = this.orderBook.find(o => o.ticker() === market);
         if (!orderbook) {
             return;
         }
         const depth = orderbook.getDepth();
+    
         if (side === "buy") {
-            const updatedAsks = depth?.asks.filter(x => fills.map(f => f.price).includes(x[0].toString()));
-            const updatedBid = depth?.bids.find(x => x[0] === price);
-            console.log("publish ws depth updates")
+            const updatedAsks = depth.asks.filter(x => fills.map(f => f.price).includes(x[0]));
+            const updatedBid = depth.bids.find(x => x[0] === price);
+    
             RedisManager.getInstance().publishMessage(`depth@${market}`, {
                 stream: `depth@${market}`,
                 data: {
-                    a: updatedAsks,
+                    a: updatedAsks.length ? updatedAsks : [],
                     b: updatedBid ? [updatedBid] : [],
                     e: "depth"
                 }
             });
         }
+    
         if (side === "sell") {
-           const updatedBids = depth?.bids.filter(x => fills.map(f => f.price).includes(x[0].toString()));
-           const updatedAsk = depth?.asks.find(x => x[0] === price);
-           console.log("publish ws depth updates")
-           RedisManager.getInstance().publishMessage(`depth@${market}`, {
-               stream: `depth@${market}`,
-               data: {
-                   a: updatedAsk ? [updatedAsk] : [],
-                   b: updatedBids,
-                   e: "depth"
-               }
-           });
+            const updatedBids = depth.bids.filter(x => fills.map(f => f.price).includes(x[0]));
+            const updatedAsk = depth.asks.find(x => x[0] === price);
+    
+            RedisManager.getInstance().publishMessage(`depth@${market}`, {
+                stream: `depth@${market}`,
+                data: {
+                    a: updatedAsk ? [updatedAsk] : [],
+                    b: updatedBids.length ? updatedBids : [],
+                    e: "depth"
+                }
+            });
         }
     }
+    
     updateBalance(userId: string, baseAsset: string, quoteAsset: string, side: "buy" | "sell", fills: Fill[], executedQty: number) {
         if (side === "buy") {
             fills.forEach(fill => {
@@ -409,7 +425,39 @@ export class Engine{
             userBalance[BASE_CURRENCY].available += amount;
         }
     }
+    async pollDatabase(market:string) {
+        market.toLowerCase();
+        const baseAsset = market.split("_")[0]
+        try {
+            const queries = [
+                `SELECT * FROM ${baseAsset}_1m ORDER BY "end" DESC LIMIT 1`,
+                `SELECT * FROM ${baseAsset}_1h ORDER BY "end" DESC LIMIT 1`,
+                `SELECT * FROM ${baseAsset}_1w ORDER BY "end" DESC LIMIT 1`
+            ];
 
+            const [sol1mData, sol1hData, sol1wData] = await Promise.all(
+                queries.map(query => this.pgClient.query(query))
+            );
+
+            // console.log("sol_1m Data:", sol1mData.rows);
+            // console.log("sol_1h Data:", sol1hData.rows);
+            // console.log("sol_1w Data:", sol1wData.rows);
+            RedisManager.getInstance().publishMessage(`kline@${market}` , {
+                stream:`kline@${market}`,
+                data:{
+                    e:"kline",
+                    time:sol1hData.rows[0].end,
+                    close:sol1hData.rows[0].close,
+                    open:sol1hData.rows[0].open,
+                    high:sol1hData.rows[0].high,
+                    low:sol1hData.rows[0].low
+                }
+            });
+            // Process the fetched data as needed
+        } catch (error) {
+            console.error("Error polling database:", error);
+        }
+    }
     setBaseBalances() {
         this.balances.set("1", {
             [BASE_CURRENCY]: {

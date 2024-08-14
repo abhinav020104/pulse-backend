@@ -10,5 +10,13 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "@types/express-rate-limit": "^6.0.0",
+    "@types/helmet": "^4.0.0",
+    "@types/morgan": "^1.9.9",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0"
+  }
 }

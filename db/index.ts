@@ -2,7 +2,6 @@ import { Client } from "pg";
 import { createClient } from "redis";
 import { DbMessage } from "./types";
 
-// PostgreSQL client setup
 const pgClient = new Client({
     user: "your_user",
     host: "localhost",
@@ -11,55 +10,85 @@ const pgClient = new Client({
     port: 5432,
 });
 
-// Connect to PostgreSQL
 pgClient.connect();
 
-// Function to create materialized views
 async function createMaterializedViews() {
     const createViewsQueries = `
         CREATE MATERIALIZED VIEW IF NOT EXISTS sol_1m AS
+        WITH ordered_data AS (
+            SELECT
+                time_bucket('1 minute', time) AS bucket,
+                time,
+                price,
+                ROW_NUMBER() OVER (PARTITION BY time_bucket('1 minute', time) ORDER BY time ASC) AS rn_asc,
+                ROW_NUMBER() OVER (PARTITION BY time_bucket('1 minute', time) ORDER BY time DESC) AS rn_desc
+            FROM SOL_USD
+        )
         SELECT
-            time_bucket('1 minute', time) AS bucket,
-            ARRAY_AGG(price) AS prices,
-            AVG(price) AS avg_price,
-            MAX(price) AS max_price,
-            MIN(price) AS min_price,
-            SUM(price) AS total_volume
-        FROM SOL_USD
+            bucket AS end,
+            ARRAY_AGG(price ORDER BY time) AS prices,
+            MAX(CASE WHEN rn_asc = 1 THEN price END) AS open,
+            MAX(CASE WHEN rn_desc = 1 THEN price END) AS close,
+            MAX(price) AS high,
+            MIN(price) AS low,
+            SUM(price) AS volume,
+            COUNT(*) AS trades
+        FROM ordered_data
         GROUP BY bucket;
 
         CREATE MATERIALIZED VIEW IF NOT EXISTS sol_1h AS
+        WITH ordered_data AS (
+            SELECT
+                time_bucket('1 hour', time) AS bucket,
+                time,
+                price,
+                ROW_NUMBER() OVER (PARTITION BY time_bucket('1 hour', time) ORDER BY time ASC) AS rn_asc,
+                ROW_NUMBER() OVER (PARTITION BY time_bucket('1 hour', time) ORDER BY time DESC) AS rn_desc
+            FROM SOL_USD
+        )
         SELECT
-            time_bucket('1 hour', time) AS bucket,
-            ARRAY_AGG(price) AS prices,
-            AVG(price) AS avg_price,
-            MAX(price) AS max_price,
-            MIN(price) AS min_price,
-            SUM(price) AS total_volume
-        FROM SOL_USD
+            bucket AS end,
+            ARRAY_AGG(price ORDER BY time) AS prices,
+            MAX(CASE WHEN rn_asc = 1 THEN price END) AS open,
+            MAX(CASE WHEN rn_desc = 1 THEN price END) AS close,
+            MAX(price) AS high,
+            MIN(price) AS low,
+            SUM(price) AS volume,
+            COUNT(*) AS trades
+        FROM ordered_data
         GROUP BY bucket;
 
         CREATE MATERIALIZED VIEW IF NOT EXISTS sol_1w AS
+        WITH ordered_data AS (
+            SELECT
+                time_bucket('1 week', time) AS bucket,
+                time,
+                price,
+                ROW_NUMBER() OVER (PARTITION BY time_bucket('1 week', time) ORDER BY time ASC) AS rn_asc,
+                ROW_NUMBER() OVER (PARTITION BY time_bucket('1 week', time) ORDER BY time DESC) AS rn_desc
+            FROM SOL_USD
+        )
         SELECT
-            time_bucket('1 week', time) AS bucket,
-            ARRAY_AGG(price) AS prices,
-            AVG(price) AS avg_price,
-            MAX(price) AS max_price,
-            MIN(price) AS min_price,
-            SUM(price) AS total_volume
-        FROM SOL_USD
+            bucket AS end,
+            ARRAY_AGG(price ORDER BY time) AS prices,
+            MAX(CASE WHEN rn_asc = 1 THEN price END) AS open,
+            MAX(CASE WHEN rn_desc = 1 THEN price END) AS close,
+            MAX(price) AS high,
+            MIN(price) AS low,
+            SUM(price) AS volume,
+            COUNT(*) AS trades
+        FROM ordered_data
         GROUP BY bucket;
     `;
 
     try {
         await pgClient.query(createViewsQueries);
-        console.log("Materialized views created or already exist.");
+        console.log("Materialized views created successfully.");
     } catch (error) {
         console.error("Error creating materialized views:", error);
     }
 }
 
-// Function to refresh materialized views
 async function refreshMaterializedViews() {
     try {
         await pgClient.query("REFRESH MATERIALIZED VIEW sol_1m");
@@ -71,23 +100,20 @@ async function refreshMaterializedViews() {
     }
 }
 
-// Main function to process Redis messages and insert data
 async function main() {
     const redisClient = createClient();
     await redisClient.connect();
     console.log("Connection with Redis successful");
 
-    // Create materialized views once (or ensure they're created)
     await createMaterializedViews();
-
+    
     while (true) {
         const response = await redisClient.rPop("db_processor" as string);
         if (!response) {
-            // No new messages; could add sleep or wait time here
             continue;
         }
-
         const data: DbMessage = JSON.parse(response);
+
         if (data.type === "TRADE_ADDED") {
             console.log("Adding data");
             console.log(data);
@@ -95,7 +121,6 @@ async function main() {
             const tableName = data.data.market;
             const price = data.data.price;
 
-            // Convert timestamp from milliseconds to a valid Date object
             const timestamp = new Date(Number(data.data.timestamp));
             console.log(`Timestamp: ${timestamp}`);
 
@@ -123,16 +148,10 @@ async function main() {
             } catch (error) {
                 console.error("Error inserting data:", error);
             }
-
-            // Optionally refresh materialized views after inserting data
-            // This could be done periodically or based on a different trigger
-            // await refreshMaterializedViews();
         }
     }
 }
 
-// Start the main function
 main().catch(console.error);
 
-// Optional: Periodically refresh materialized views
-setInterval(refreshMaterializedViews, 10000); // Adjust the interval as needed
+setInterval(refreshMaterializedViews, 10000);

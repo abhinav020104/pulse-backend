@@ -44,4 +44,16 @@ export type tickerUpdateMessage ={
     }
 }
 
-export type WsMessage = tickerUpdateMessage | DepthUpdateMessage | TradeAddedMessage;
+export type klineMessage = {
+    stream:string,
+    data:{
+        e:"kline",
+        time:string,
+        close:string,
+        high:string,
+        low:string,
+        open:string,
+    }
+}
+
+export type WsMessage = tickerUpdateMessage | DepthUpdateMessage | TradeAddedMessage | klineMessage;

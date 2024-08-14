@@ -3,9 +3,9 @@ import axios from "axios";
 const BASE_URL = "http://localhost:3000";
 const TOTAL_BIDS = 50;
 const TOTAL_ASK = 50;
-const USER_IDS = ["1", "2", "3", "4", "5"]; // Array of different user IDs
-const SYMBOLS = ["SOL_USD"]; // Array of different symbols
-const MAX_REQUESTS_PER_SECOND = 2; // Adjust based on API rate limits
+const USER_IDS = ["1", "2", "3", "4", "5"];
+const SYMBOLS = ["SOL_USD"];
+const MAX_REQUESTS_PER_SECOND = 2;
 
 let requestQueue: (() => void)[] = [];
 let isProcessing = false;
@@ -28,7 +28,7 @@ function processQueue() {
     isProcessing = true;
     let start = Date.now();
     let requestsInCurrentSecond = 0;
-    
+
     const processNext = () => {
         if (requestsInCurrentSecond >= MAX_REQUESTS_PER_SECOND) {
             const delay = 1000 - (Date.now() - start);
@@ -48,20 +48,25 @@ function processQueue() {
             next && next();
         }
     };
-    
+
     processNext();
 }
 
 async function simulateMarketMaker(userId: string, symbol: string) {
     async function main() {
-        const price = 129 + Math.random() * 10;
+        const price = 420 + Math.random() * 10;
         const openOrders = await rateLimitRequest(() =>
             axios.get(`${BASE_URL}/api/v1/order/open?userId=${userId}&market=${symbol}`)
         );
+
         //@ts-ignore    
         const totalBids = openOrders.data.filter((o: any) => o.side === "buy").length;
         //@ts-ignore       
         const totalAsks = openOrders.data.filter((o: any) => o.side === "sell").length;
+        
+        // Add a small delay between actions to mimic human-like behavior
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 500 + 500));
+
         //@ts-ignore
         const cancelledBids = await cancelBidsMoreThan(openOrders.data, price);
         //@ts-ignore
@@ -76,28 +81,32 @@ async function simulateMarketMaker(userId: string, symbol: string) {
                     axios.post(`${BASE_URL}/api/v1/order`, {
                         market: symbol,
                         price: (price - Math.random() * 1).toFixed(1).toString(),
-                        quantity: "1",
+                        quantity: (60 + Math.random()*1).toFixed(1).toString(),
                         side: "buy",
                         userId: userId
                     })
                 );
                 bidsToAdd--;
+                await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500)); // Random delay
             }
             if (asksToAdd > 0) {
                 await rateLimitRequest(() =>
                     axios.post(`${BASE_URL}/api/v1/order`, {
                         market: symbol,
                         price: (price + Math.random() * 1).toFixed(1).toString(),
-                        quantity: "1",
+                        quantity: (60 + Math.random()*1).toFixed(1).toString(),
+
                         side: "sell",
                         userId: userId
                     })
                 );
                 asksToAdd--;
+                await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500)); // Random delay
             }
         }
 
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Wait a random amount of time before the next round to simulate market fluctuations
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 3000 + 2000));
 
         main();
     }
@@ -105,7 +114,7 @@ async function simulateMarketMaker(userId: string, symbol: string) {
     async function cancelBidsMoreThan(openOrders: any[], price: number) {
         let promises: any[] = [];
         openOrders.map(o => {
-            if (o.side === "buy" && (o.price > price || Math.random() < 0.1)) {
+            if (o.side === "buy" && (o.price > price + Math.random() * 0.5 || Math.random() < 0.2)) {
                 promises.push(rateLimitRequest(() =>
                     axios.delete(`${BASE_URL}/api/v1/order`, {
                         data: {
@@ -123,7 +132,7 @@ async function simulateMarketMaker(userId: string, symbol: string) {
     async function cancelAsksLessThan(openOrders: any[], price: number) {
         let promises: any[] = [];
         openOrders.map(o => {
-            if (o.side === "sell" && (o.price < price || Math.random() < 0.5)) {
+            if (o.side === "sell" && (o.price < price - Math.random() * 0.5 || Math.random() < 0.2)) {
                 promises.push(rateLimitRequest(() =>
                     axios.delete(`${BASE_URL}/api/v1/order`, {
                         data: {
