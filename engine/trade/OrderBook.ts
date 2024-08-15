@@ -56,6 +56,7 @@ export class OrderBook{
     }{
         if(order.side === "buy"){
             const {executedQty , fills} = this.matchBid(order);
+            // console.log(order); 
             order.filled = executedQty;
             if(executedQty === order.quantity){
                 return{
@@ -63,6 +64,9 @@ export class OrderBook{
                     fills
                 }
             }
+            order.quantity -= order.filled;
+            order.filled = 0;
+            console.log(order);
             this.bids.push(order);
             return{
                 executedQty,
@@ -77,6 +81,9 @@ export class OrderBook{
                     fills
                 }
             }
+            order.quantity -= order.filled;
+            order.filled = 0;
+            console.log(order);
             this.asks.push(order);
             return{
                 executedQty,
@@ -104,15 +111,17 @@ export class OrderBook{
                 })
 
                 this.currentPrice = this.asks[i].price;
-
+                
             }
         }
 
         for(let i = 0 ; i < this.asks.length ;i++){
             if(this.asks[i].filled === this.asks[i].quantity){
-                this.asks.splice(i , 1);
-                i--;
+                this.asks[i].quantity = 0; 
             }
+            // else{
+            //     this.asks[i].quantity -= this.asks[i].filled;
+            // }
         }
 
         return {
@@ -144,9 +153,11 @@ export class OrderBook{
         }
         for (let i = 0; i < this.bids.length; i++) {
             if (this.bids[i].filled === this.bids[i].quantity) {
-                this.bids.splice(i, 1);
-                i--;
+                this.bids[i].quantity = 0;
             }
+            // else{
+            //     this.bids[i].quantity -= this.bids[i].filled;
+            // }
         }
         return {
             fills,
