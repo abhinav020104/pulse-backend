@@ -211,7 +211,7 @@ export class Engine{
             side,
             userId
         }
-        
+        orderbook.removeZeroQtyDepth();
         const { fills, executedQty } = orderbook.addOrder(order);
         this.sendUpdatedDepthAt(price , market);
         this.updateBalance(userId, baseAsset, quoteAsset, side, fills, executedQty);
@@ -227,9 +227,8 @@ export class Engine{
                 s:orderbook.baseAsset
             }
         })
-        setTimeout(()=>{
-            this.pollDatabase(market)
-        })
+        this.pollDatabase(market);
+        orderbook.removeZeroQtyDepth();
         return { executedQty, fills, orderId: order.orderId };
     }
     updateDbOrders(order: Order, executedQty: number, fills: Fill[], market: string) {
@@ -386,31 +385,55 @@ export class Engine{
     }
 
     checkAndLockFunds(baseAsset: string, quoteAsset: string, side: "buy" | "sell", userId: string, asset: string, price: string, quantity: string) {
+        const userBalance = this.balances.get(userId);
+    
+        if (!userBalance) {
+            throw new Error(`User ${userId} does not exist.`);
+        }
+    
         if (side === "buy") {
-            if ((this.balances.get(userId)?.[quoteAsset]?.available || 0) < Number(quantity) * Number(price)) {
-                console.log("Insufficient Funds")
+            const availableQuote = userBalance[quoteAsset]?.available || 0;
+            const lockedQuote = userBalance[quoteAsset]?.locked || 0;
+            const requiredFunds = Number(quantity) * Number(price);
+    
+            if (availableQuote < requiredFunds) {
+                console.log("Insufficient Funds");
                 throw new Error("Insufficient funds");
             }
-            if ((this.balances.get(userId)?.[baseAsset]?.available || 0)  === 0) {
-                console.log("Insufficient Asset")
+    
+            const availableBase = userBalance[baseAsset]?.available || 0;
+    
+            if (availableBase === 0) {
+                console.log("Insufficient Asset");
                 throw new Error("Insufficient Asset");
             }
-            //@ts-ignore
-            this.balances.get(userId)[quoteAsset].available = this.balances.get(userId)?.[quoteAsset].available - (Number(quantity) * Number(price));
-            
-            //@ts-ignore
-            this.balances.get(userId)[quoteAsset].locked = this.balances.get(userId)?.[quoteAsset].locked + (Number(quantity) * Number(price));
-        } else {
-            if ((this.balances.get(userId)?.[baseAsset]?.available || 0) < Number(quantity)) {
+    
+            userBalance[quoteAsset].available = availableQuote - requiredFunds;
+            userBalance[quoteAsset].locked = lockedQuote + requiredFunds;
+    
+            if (userBalance[quoteAsset].available < 0 || userBalance[quoteAsset].locked < 0) {
+                console.log("Negative Balance Detected");
                 throw new Error("Insufficient funds");
             }
-            //@ts-ignore
-            this.balances.get(userId)[baseAsset].available = this.balances.get(userId)?.[baseAsset].available - (Number(quantity));
-            
-            //@ts-ignore
-            this.balances.get(userId)[baseAsset].locked = this.balances.get(userId)?.[baseAsset].locked + Number(quantity);
+        } else {
+            const availableBase = userBalance[baseAsset]?.available || 0;
+            const lockedBase = userBalance[baseAsset]?.locked || 0;
+    
+            if (availableBase < Number(quantity)) {
+                throw new Error("Insufficient funds");
+            }
+    
+            userBalance[baseAsset].available = availableBase - Number(quantity);
+            userBalance[baseAsset].locked = lockedBase + Number(quantity);
+    
+            if (userBalance[baseAsset].available < 0 || userBalance[baseAsset].locked < 0) {
+                console.log("Negative Balance Detected");
+                throw new Error("Insufficient funds");
+            }
         }
     }
+    
+
 
     onRamp(userId: string, amount: number) {
         const userBalance = this.balances.get(userId);

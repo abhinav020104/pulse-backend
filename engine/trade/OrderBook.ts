@@ -195,8 +195,8 @@ export class OrderBook{
         for(const price in asksObj){
             asks.push([price , asksObj[price].toString()]);
         }
-        console.log("bids" , bids);
-        console.log("asks" , asks); 
+        // console.log("bids" , bids);
+        // console.log("asks" , asks); 
         return{
             bids,
             asks,
@@ -228,4 +228,24 @@ export class OrderBook{
         }
     }
     
+    removeZeroQtyDepth(){
+        const updatedAsks =  this.asks;
+        const updatedBids =  this.bids;
+        for(let i = 0 ; i<updatedAsks.length ; i++){
+            if(updatedAsks[i].quantity === 0){
+                updatedAsks.splice(i , 1);
+                i--;
+            }
+        }
+        for(let i = 0 ; i<updatedBids.length ;i++){
+            if(updatedBids[i].quantity === 0){
+                updatedBids.splice(i,1);
+                i--;
+            }
+        }
+
+        this.asks = updatedAsks;
+        this.bids = updatedBids; 
+    }
+
 } 

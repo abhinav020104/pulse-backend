@@ -4,10 +4,10 @@ const BASE_URL = "http://localhost:3000";
 const TOTAL_BIDS = 15;
 const TOTAL_ASK = 15;
 const MARKET = "SOL_USD";
-const USER_ID = "1";
+const USER_ID = "3";
 
 async function main() {
-    const price = 150 + Math.random() * 10;
+    const price = 165 + Math.random() * 10;
     const openOrders = await axios.get(`${BASE_URL}/api/v1/order/open?userId=${USER_ID}&market=${MARKET}`);
 
     const totalBids = openOrders.data.filter((o: any) => o.side === "buy").length;
@@ -25,7 +25,7 @@ async function main() {
             await axios.post(`${BASE_URL}/api/v1/order`, {
                 market: MARKET,
                 price: (price - Math.random() * 1).toFixed(1).toString(),
-                quantity: "1",
+                quantity: "10",
                 side: "buy",
                 userId: USER_ID
             });
@@ -35,7 +35,7 @@ async function main() {
             await axios.post(`${BASE_URL}/api/v1/order`, {
                 market: MARKET,
                 price: (price + Math.random() * 1).toFixed(1).toString(),
-                quantity: "1",
+                quantity: "10",
                 side: "sell",
                 userId: USER_ID
             });
