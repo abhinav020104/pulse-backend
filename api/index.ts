@@ -21,6 +21,12 @@ app.use("/api/v1/klines", klineRouter);
 app.use("/api/v1/tickers", tickerRouter);
 app.use("/api/v1/auth" , authRouter);
 app.use("/api/v1/setbalances" , router);
+app.get("/",(req , res)=>{
+    return res.status(200).json({
+        sucess:true,
+        message:"You landed on a test route"
+    })
+})
 app.listen(3000, () => {
     console.log("Server is running on port 3000");
 });
