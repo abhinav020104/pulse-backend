@@ -3,7 +3,8 @@ export const CANCEL_ORDER = "CANCEL_ORDER";
 export const ON_RAMP = "ON_RAMP";
 export const GET_OPEN_ORDERS  = "GET_OPEN_ORDERS";
 export const GET_DEPTH   = "GET_DEPTH";
-
+export const SET_BALANCES = "SET_BALANCES"
+export const GET_TICKERS = "GET_TICKERS"
 export type MessageFromOrderBook =  {
     type : "DEPTH",
     payload : {
@@ -34,4 +35,15 @@ export type MessageFromOrderBook =  {
         side: "buy" | "sell",
         userId: string
     }[]
+} | {
+    type:"SET_BALANCES",
+    payload:{
+        id:String,
+        avaialableBalance:number
+    }
+} | {
+    type:"GET_TICKERS",
+    payload:{
+        id:string
+    }
 }

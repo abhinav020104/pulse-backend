@@ -4,7 +4,7 @@ import { DbMessage } from "./types";
 
 const pgClient = new Client({
     user: "your_user",
-    host: "localhost",
+    host: "timescaledb",
     database: "my_database",
     password: "your_password",
     port: 5432,
@@ -12,9 +12,9 @@ const pgClient = new Client({
 
 pgClient.connect();
 
-async function createMaterializedViews() {
+async function createMaterializedViews(baseAsset:any) {
     const createViewsQueries = `
-        CREATE MATERIALIZED VIEW IF NOT EXISTS sol_1m AS
+        CREATE MATERIALIZED VIEW IF NOT EXISTS ${baseAsset}_1m AS
         WITH ordered_data AS (
             SELECT
                 time_bucket('1 minute', time) AS bucket,
@@ -36,7 +36,7 @@ async function createMaterializedViews() {
         FROM ordered_data
         GROUP BY bucket;
 
-        CREATE MATERIALIZED VIEW IF NOT EXISTS sol_1h AS
+        CREATE MATERIALIZED VIEW IF NOT EXISTS ${baseAsset}_1h AS
         WITH ordered_data AS (
             SELECT
                 time_bucket('1 hour', time) AS bucket,
@@ -58,7 +58,7 @@ async function createMaterializedViews() {
         FROM ordered_data
         GROUP BY bucket;
 
-        CREATE MATERIALIZED VIEW IF NOT EXISTS sol_1w AS
+        CREATE MATERIALIZED VIEW IF NOT EXISTS ${baseAsset}_1w AS
         WITH ordered_data AS (
             SELECT
                 time_bucket('1 week', time) AS bucket,
@@ -89,11 +89,11 @@ async function createMaterializedViews() {
     }
 }
 
-async function refreshMaterializedViews() {
+async function refreshMaterializedViews(baseAsset:any) {
     try {
-        await pgClient.query("REFRESH MATERIALIZED VIEW sol_1m");
-        await pgClient.query("REFRESH MATERIALIZED VIEW sol_1h");
-        await pgClient.query("REFRESH MATERIALIZED VIEW sol_1w");
+        await pgClient.query(`REFRESH MATERIALIZED VIEW ${baseAsset}_1m`);
+        await pgClient.query(`REFRESH MATERIALIZED VIEW ${baseAsset}_1h`);
+        await pgClient.query(`REFRESH MATERIALIZED VIEW ${baseAsset}_1w`);
         console.log("Materialized views refreshed successfully.");
     } catch (error) {
         console.error("Error refreshing materialized views:", error);
@@ -104,8 +104,7 @@ async function main() {
     const redisClient = createClient();
     await redisClient.connect();
     console.log("Connection with Redis successful");
-
-    await createMaterializedViews();
+    
     
     while (true) {
         const response = await redisClient.rPop("db_processor" as string);
@@ -113,14 +112,17 @@ async function main() {
             continue;
         }
         const data: DbMessage = JSON.parse(response);
-
+        
         if (data.type === "TRADE_ADDED") {
             console.log("Adding data");
             console.log(data);
-
+            
             const tableName = data.data.market;
             const price = data.data.price;
-
+            let Tempmarket = data.data.market.toLowerCase();
+            const baseAsset = Tempmarket.split("_")[0];
+        
+            await createMaterializedViews(baseAsset);
             const timestamp = new Date(Number(data.data.timestamp));
             console.log(`Timestamp: ${timestamp}`);
 

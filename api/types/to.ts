@@ -1,4 +1,4 @@
-import { CANCEL_ORDER, CREATE_ORDER, GET_DEPTH, GET_OPEN_ORDERS, ON_RAMP } from "."
+import { CANCEL_ORDER, CREATE_ORDER, GET_DEPTH, GET_OPEN_ORDERS, ON_RAMP , SET_BALANCES , GET_TICKERS} from "."
 
 export type MessageToEngine = {
     type: typeof CREATE_ORDER,
@@ -33,4 +33,15 @@ export type MessageToEngine = {
         userId: string,
         market: string,
     }
+} | {
+    type : typeof SET_BALANCES,
+    data:{
+        id:string,
+        avaialableBalance:Number,
+    }
+} | {
+    type: typeof GET_TICKERS,
+    // data:{
+    //     id:string,
+    // }
 }

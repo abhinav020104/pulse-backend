@@ -5,7 +5,9 @@ import { Engine } from "./trade/Engine";
 async function main() {
     const engine = new Engine(); 
     console.log("engine-created")
-    const redisClient = createClient();
+    const redisClient = createClient({
+        //  url: 'redis://redis:6379'
+    });
     await redisClient.connect();
     console.log("connected to redis");
 

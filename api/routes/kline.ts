@@ -16,17 +16,20 @@ pgClient.connect();
 export const klineRouter  = Router();
 
 klineRouter.get("/" , async(req , res) => {
-    const {market , interval , startTime , endTime} = req.query;
+    const {symbol , interval , startTime , endTime} = req.query;
     let query;
+    //@ts-ignore
+    let Tempmarket = symbol.toLowerCase();
+    const baseAsset = Tempmarket.split("_")[0];
     switch(interval){
         case "1m" :
-            query = `SELECT * FROM sol_1m WHERE "end" >= $1 AND "end" <= $2`;
+            query = `SELECT * FROM ${baseAsset}_1m WHERE "end" >= $1 AND "end" <= $2`;
             break;
         case '1h':
-            query = `SELECT * FROM sol_1h WHERE  "end" >= $1 AND "end" <= $2`;
+            query = `SELECT * FROM ${baseAsset}_1h WHERE  "end" >= $1 AND "end" <= $2`;
             break;
         case '1w':
-            query = `SELECT * FROM sol_1w WHERE "end" >= $1 AND "end" <= $2`;
+            query = `SELECT * FROM ${baseAsset}_1w WHERE "end" >= $1 AND "end" <= $2`;
             break;
         default:
             return res.status(400).send('Invalid interval');

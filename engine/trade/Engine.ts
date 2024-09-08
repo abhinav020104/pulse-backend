@@ -1,7 +1,7 @@
 import fs from "fs";
 import { RedisManager } from "../RedisManager";
 import { ORDER_UPDATE, TRADE_ADDED } from "../types/index";
-import { CANCEL_ORDER, CREATE_ORDER, GET_DEPTH, GET_OPEN_ORDERS, MessageFromApi, ON_RAMP } from "../types/fromApi";
+import { CANCEL_ORDER, CREATE_ORDER, GET_DEPTH, GET_OPEN_ORDERS, MessageFromApi, ON_RAMP, SET_BALANCES , GET_TICKERS} from "../types/fromApi";
 import { Fill, Order, OrderBook } from "./OrderBook";
 import {Client} from "pg"
 export const BASE_CURRENCY = "USD";
@@ -45,8 +45,15 @@ export class Engine{
             this.orderBook = snapshotSnapshot.orderBook.map((o: any) => new OrderBook(o.baseAsset, o.bids, o.asks, o.lastTradeId, o.currentPrice));
             this.balances = new Map(snapshotSnapshot.balances);
         } else {
-            // console.log("here"); 
-            this.orderBook = [new OrderBook(`SOL`, [], [], 0, 0)];
+            this.orderBook.push(new OrderBook(`SOL`, [], [], 0, 0));
+            this.orderBook.push(new OrderBook(`BTC`, [], [], 0, 0));
+            this.orderBook.push(new OrderBook(`ETH`, [], [], 0, 0));
+            this.orderBook.push(new OrderBook(`TETHER`, [], [], 0, 0));
+            this.orderBook.push(new OrderBook(`MAX`, [], [], 0, 0));
+            this.orderBook.push(new OrderBook(`POLYGON`, [], [], 0, 0));
+            this.orderBook.push(new OrderBook(`BANANA`, [], [], 0, 0));
+            this.orderBook.push(new OrderBook(`UNI`, [], [], 0, 0));
+            this.orderBook.push(new OrderBook(`SHIB`, [], [], 0, 0));
             this.setBaseBalances();
         }
         setInterval(() => {
@@ -185,6 +192,61 @@ export class Engine{
                         });
                     }
                     break;
+                case SET_BALANCES:
+                    try {
+                        console.log(message.data.avaialableBalance);
+                        console.log(message.data.id);
+                        const userId = message.data.id;
+                        const amount = Number(message.data.avaialableBalance);
+                        console.log(typeof(amount));
+                        const userBalance = this.balances.get(userId)
+                        if(!userBalance){
+                            this.balances.set(userId , {
+                                [BASE_CURRENCY]:{
+                                    available:amount,
+                                    locked:0
+                                },
+                                "SOL": { available: 0, locked: 0 },
+                                "BTC": { available: 0, locked: 0 }, 
+                                "ETH": { available: 0, locked: 0 }, 
+                                "TETHER": { available: 0, locked: 0 }, 
+                                "SHIB": { available: 0, locked: 0 }, 
+                                "MAX": { available: 0, locked: 0 }, 
+                                "POLYGON": { available: 0, locked: 0 }, 
+                                "BANANA": { available: 0, locked: 0 }, 
+                                "UNI": { available: 0, locked: 0 } 
+                            })
+                        }else{
+                            userBalance[BASE_CURRENCY].available += amount;
+                            console.log(typeof(userBalance[BASE_CURRENCY].available))
+                        }
+                        RedisManager.getInstance().sendToApi(clientId, {
+                            type: "BALANCE",
+                            //@ts-ignore
+                            payload: this.balances.get(userId),
+                        });
+                    }catch(e){
+                        console.log(e);
+                    }
+                case GET_TICKERS:
+                    try{
+                        const allSymbols = this.orderBook.map((x) => {
+                            console.log(x);
+                            return {
+                                symbol : x.baseAsset + "_" + x.quoteAsset,
+                                currentPrice : x.currentPrice
+                            }
+                        })
+                        RedisManager.getInstance().sendToApi(clientId , {
+                            type:"TICKERS",
+                            payload:{
+                                tickers:allSymbols
+                        }})
+                        // console.log(allSymbols);
+                    }catch(e){
+                        console.log(e);
+                        console.log("Error while getting tickers");
+                    }
         }
     }
     addOrderbook(orderbook: OrderBook) {
@@ -202,7 +264,7 @@ export class Engine{
         }
 
         this.checkAndLockFunds(baseAsset, quoteAsset, side, userId, quoteAsset, price, quantity);
-
+        console.log("Funds Checked");
         const order: Order = {
             price: Number(price),
             quantity: Number(quantity),
@@ -219,12 +281,21 @@ export class Engine{
         this.updateDbOrders(order, executedQty, fills, market);
         this.publishWsDepthUpdates(fills, price, side, market);
         this.publishWsTrades(fills, userId, market);
+        this.publish24hStats(market);
         RedisManager.getInstance().publishMessage(`ticker@${market}`,{
             stream:`{ticker@${market}}`,
             data:{
                 e:"ticker",
                 c:orderbook.currentPrice.toString(),
-                s:orderbook.baseAsset
+                s:orderbook.baseAsset + "_" + orderbook.quoteAsset,
+            }
+        })
+        RedisManager.getInstance().publishMessage(`ticker@${market}` , {
+            stream:`{ticker@${market}}`,
+            data:{
+                e:"allTickers",
+                c:orderbook.currentPrice.toString(),
+                s:orderbook.baseAsset + "_" + orderbook.quoteAsset,
             }
         })
         this.pollDatabase(market);
@@ -384,54 +455,97 @@ export class Engine{
         }
     }
 
-    checkAndLockFunds(baseAsset: string, quoteAsset: string, side: "buy" | "sell", userId: string, asset: string, price: string, quantity: string) {
-        const userBalance = this.balances.get(userId);
+    async publish24hStats(market: string) {
+        let Tempmarket = market.toLowerCase();
+        const baseAsset = Tempmarket.split("_")[0];
+        try {
+            // Query to fetch the last 24 hours data from the _1m table
+            const query = `
+        SELECT 
+            MIN(close) AS low24h,
+            MAX(close) AS high24h,
+            SUM(volume) AS volume24h,
+            (SELECT close FROM ${baseAsset}_1h ORDER BY "end" DESC LIMIT 1) AS currentPrice,
+            (SELECT open FROM ${baseAsset}_1h ORDER BY "end" ASC LIMIT 1) AS open24h
+        FROM ${baseAsset}_1m
+        WHERE "end" >= NOW() - INTERVAL '24 hours'`;
     
+            // Execute the query
+            const { rows } = await this.pgClient.query(query);
+            const data = rows[0];
+            console.log(data);
+            // Calculate 24h change
+
+            const change24h = Number(data.currentprice) - Number(data.open24h);
+            const change24hPercentage = (change24h / Number(data.open24h)) * 100;
+    
+            // Return the 24h stats
+            RedisManager.getInstance().publishMessage(`24hdata@${market}` , {
+            stream:`24hdata@${market}`,
+                data:{
+                    e:"24hstats",
+                    s: market,
+                    currentPrice: data.currentprice,
+                    change24h: change24h.toFixed(2),
+                    change24hPercentage: change24hPercentage.toFixed(2),
+                    high24h: data.high24h,
+                    low24h: data.low24h,
+                    volume24h: data.volume24h
+                }
+            })
+            // return {
+            //     symbol: market,
+            //     currentPrice: data.currentPrice,
+            //     change24h: change24h.toFixed(2),
+            //     change24hPercentage: change24hPercentage.toFixed(2),
+            //     high24h: data.high24h,
+            //     low24h: data.low24h,
+            //     volume24h: data.volume24h
+            // };
+        } catch (error) {
+            console.error("Error fetching 24h stats:", error);
+            throw error;
+        }
+    }
+
+    
+    checkAndLockFunds(
+        baseAsset: string,
+        quoteAsset: string,
+        side: "buy" | "sell",
+        userId: string,
+        ticker: string,
+        price: string,
+        quantity: string
+    ) {
+        const userBalance = this.balances.get(userId);
         if (!userBalance) {
-            throw new Error(`User ${userId} does not exist.`);
+            throw new Error("User balance not found");
+        }
+    
+        const availableBase = userBalance[baseAsset]?.available || 0;
+        const availableQuote = userBalance[quoteAsset]?.available || 0;
+    
+        if (side === "sell" && availableBase === 0) {
+            throw new Error("Insufficient base asset balance to sell");
         }
     
         if (side === "buy") {
-            const availableQuote = userBalance[quoteAsset]?.available || 0;
-            const lockedQuote = userBalance[quoteAsset]?.locked || 0;
-            const requiredFunds = Number(quantity) * Number(price);
-    
-            if (availableQuote < requiredFunds) {
-                console.log("Insufficient Funds");
-                throw new Error("Insufficient funds");
+            const requiredQuote = Number(price) * Number(quantity);
+            if (availableQuote < requiredQuote) {
+                throw new Error("Insufficient quote asset balance to buy");
             }
-    
-            const availableBase = userBalance[baseAsset]?.available || 0;
-    
-            if (availableBase === 0) {
-                console.log("Insufficient Asset");
-                throw new Error("Insufficient Asset");
-            }
-    
-            userBalance[quoteAsset].available = availableQuote - requiredFunds;
-            userBalance[quoteAsset].locked = lockedQuote + requiredFunds;
-    
-            if (userBalance[quoteAsset].available < 0 || userBalance[quoteAsset].locked < 0) {
-                console.log("Negative Balance Detected");
-                throw new Error("Insufficient funds");
-            }
-        } else {
-            const availableBase = userBalance[baseAsset]?.available || 0;
-            const lockedBase = userBalance[baseAsset]?.locked || 0;
-    
+            userBalance[quoteAsset].available -= requiredQuote;
+            userBalance[quoteAsset].locked += requiredQuote;
+        } else if (side === "sell") {
             if (availableBase < Number(quantity)) {
-                throw new Error("Insufficient funds");
+                throw new Error("Insufficient base asset balance to sell");
             }
-    
-            userBalance[baseAsset].available = availableBase - Number(quantity);
-            userBalance[baseAsset].locked = lockedBase + Number(quantity);
-    
-            if (userBalance[baseAsset].available < 0 || userBalance[baseAsset].locked < 0) {
-                console.log("Negative Balance Detected");
-                throw new Error("Insufficient funds");
-            }
+            userBalance[baseAsset].available -= Number(quantity);
+            userBalance[baseAsset].locked += Number(quantity);
         }
     }
+    
     
 
 
@@ -483,70 +597,70 @@ export class Engine{
     }
     setBaseBalances() {
         this.balances.set("1", {
-            [BASE_CURRENCY]: {
-                available: 10000000,
-                locked: 0
-            },
-            "SOL": {
-                available: 10000000,
-                locked: 0
-            }
+            [BASE_CURRENCY]: { available: 100000000000000, locked: 0 },
+            "SOL": { available: 100000000000000, locked: 0 },
+            "BTC": { available: 500000000, locked: 0 }, // Default for BTC
+            "ETH": { available: 2000000000, locked: 0 }, // Default for ETH
+            "TETHER": { available: 100000000, locked: 0 }, // Default for TETHER
+            "SHIB": { available: 1000000000000, locked: 0 }, // Default for SHIB
+            "MAX": { available: 3000000000, locked: 0 }, // Default for MAX
+            "POLYGON": { available: 5000000000, locked: 0 }, // Default for POLYGON
+            "BANANA": { available: 10000000000, locked: 0 }, // Default for BANANA
+            "UNI": { available: 100000000, locked: 0 } // Default for UNI
         });
-
+        
         this.balances.set("2", {
-            [BASE_CURRENCY]: {
-                available: 10000000,
-                locked: 0
-            },
-            "SOL": {
-                available: 10000000,
-                locked: 0
-            }
+            [BASE_CURRENCY]: { available: 100000000000000, locked: 0 },
+            "SOL": { available: 100000000000000, locked: 0 },
+            "BTC": { available: 500000000, locked: 0 }, // Default for BTC
+            "ETH": { available: 2000000000, locked: 0 }, // Default for ETH
+            "TETHER": { available: 100000000, locked: 0 }, // Default for TETHER
+            "SHIB": { available: 1000000000000, locked: 0 }, // Default for SHIB
+            "MAX": { available: 3000000000, locked: 0 }, // Default for MAX
+            "POLYGON": { available: 5000000000, locked: 0 }, // Default for POLYGON
+            "BANANA": { available: 10000000000, locked: 0 }, // Default for BANANA
+            "UNI": { available: 100000000, locked: 0 } // Default for UNI
         });
-
+        
         this.balances.set("3", {
-            [BASE_CURRENCY]: {
-                available: 10000000,
-                locked: 0
-            },
-            "SOL": {
-                available: 10000000,
-                locked: 0
-            }
+            [BASE_CURRENCY]: { available: 100000000000000, locked: 0 },
+            "SOL": { available: 100000000000000, locked: 0 },
+            "BTC": { available: 500000000, locked: 0 }, // Default for BTC
+            "ETH": { available: 2000000000, locked: 0 }, // Default for ETH
+            "TETHER": { available: 100000000, locked: 0 }, // Default for TETHER
+            "SHIB": { available: 1000000000000, locked: 0 }, // Default for SHIB
+            "MAX": { available: 3000000000, locked: 0 }, // Default for MAX
+            "POLYGON": { available: 5000000000, locked: 0 }, // Default for POLYGON
+            "BANANA": { available: 10000000000, locked: 0 }, // Default for BANANA
+            "UNI": { available: 100000000, locked: 0 } // Default for UNI
         });
-
-        this.balances.set("3", {
-            [BASE_CURRENCY]: {
-                available: 10000000,
-                locked: 0
-            },
-            "SOL": {
-                available: 10000000,
-                locked: 0
-            }
-        });
-
+        
         this.balances.set("4", {
-            [BASE_CURRENCY]: {
-                available: 10000000,
-                locked: 0
-            },
-            "SOL": {
-                available: 10000000,
-                locked: 0
-            }
+            [BASE_CURRENCY]: { available: 100000000000000, locked: 0 },
+            "SOL": { available: 100000000000000, locked: 0 },
+            "BTC": { available: 500000000, locked: 0 }, // Default for BTC
+            "ETH": { available: 2000000000, locked: 0 }, // Default for ETH
+            "TETHER": { available: 100000000, locked: 0 }, // Default for TETHER
+            "SHIB": { available: 1000000000000, locked: 0 }, // Default for SHIB
+            "MAX": { available: 3000000000, locked: 0 }, // Default for MAX
+            "POLYGON": { available: 5000000000, locked: 0 }, // Default for POLYGON
+            "BANANA": { available: 10000000000, locked: 0 }, // Default for BANANA
+            "UNI": { available: 100000000, locked: 0 } // Default for UNI
         });
-
+        
         this.balances.set("5", {
-            [BASE_CURRENCY]: {
-                available: 10000000,
-                locked: 0
-            },
-            "SOL": {
-                available: 10000000,
-                locked: 0
-            }
+            [BASE_CURRENCY]: { available: 100000000000000, locked: 0 },
+            "SOL": { available: 100000000000000, locked: 0 },
+            "BTC": { available: 500000000, locked: 0 }, // Default for BTC
+            "ETH": { available: 2000000000, locked: 0 }, // Default for ETH
+            "TETHER": { available: 100000000, locked: 0 }, // Default for TETHER
+            "SHIB": { available: 1000000000000, locked: 0 }, // Default for SHIB
+            "MAX": { available: 3000000000, locked: 0 }, // Default for MAX
+            "POLYGON": { available: 5000000000, locked: 0 }, // Default for POLYGON
+            "BANANA": { available: 10000000000, locked: 0 }, // Default for BANANA
+            "UNI": { available: 100000000, locked: 0 } // Default for UNI
         });
+        
     }
 
 }

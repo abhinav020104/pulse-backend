@@ -33,4 +33,14 @@ export type MessageToApi = {
 } | {
     type: "OPEN_ORDERS",
     payload: Order[]
+} | {
+    type: "BALANCE",
+    payload:{
+        balance:number
+    }
+} | {
+    type:"TICKERS",
+    payload:{
+        tickers:{}[]
+    }
 }

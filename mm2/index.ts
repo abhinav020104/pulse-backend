@@ -7,39 +7,43 @@ const MARKET = "SOL_USD";
 const USER_ID = "3";
 
 async function main() {
-    const price = 165 + Math.random() * 10;
+    let price = 290 + Math.random() * 10;
     const openOrders = await axios.get(`${BASE_URL}/api/v1/order/open?userId=${USER_ID}&market=${MARKET}`);
 
     const totalBids = openOrders.data.filter((o: any) => o.side === "buy").length;
     const totalAsks = openOrders.data.filter((o: any) => o.side === "sell").length;
 
-    const cancelledBids = await cancelBidsMoreThan(openOrders.data, price);
-    const cancelledAsks = await cancelAsksLessThan(openOrders.data, price);
+    let bidsToAdd = TOTAL_BIDS - totalBids;
+    let asksToAdd = TOTAL_ASK - totalAsks;
 
-
-    let bidsToAdd = TOTAL_BIDS - totalBids - cancelledBids;
-    let asksToAdd = TOTAL_ASK - totalAsks - cancelledAsks;
-
-    while(bidsToAdd > 0 || asksToAdd > 0) {
-        if (bidsToAdd > 0) {
-            await axios.post(`${BASE_URL}/api/v1/order`, {
-                market: MARKET,
-                price: (price - Math.random() * 1).toFixed(1).toString(),
-                quantity: "10",
-                side: "buy",
-                userId: USER_ID
-            });
-            bidsToAdd--;
-        }
+    while (bidsToAdd > 0 || asksToAdd > 0) {
+        price = price + 30;
         if (asksToAdd > 0) {
             await axios.post(`${BASE_URL}/api/v1/order`, {
                 market: MARKET,
                 price: (price + Math.random() * 1).toFixed(1).toString(),
-                quantity: "10",
+                quantity: Math.floor(35 + Math.random() * 10).toString(),
                 side: "sell",
                 userId: USER_ID
             });
             asksToAdd--;
+            
+            // Adding delay to simulate human behavior
+            await delay(500, 1500); // Random delay between 500ms and 1500ms
+        }
+        if (bidsToAdd > 0) {
+            price = price - 18;
+            await axios.post(`${BASE_URL}/api/v1/order`, {
+                market: MARKET,
+                price: (price +   Math.random() * 1).toFixed(1).toString(),
+                quantity: Math.floor(80 + Math.random() * 10).toString(),
+                side: "buy",
+                userId: USER_ID
+            });
+            bidsToAdd--;
+
+            // Adding delay to simulate human behavior
+            await delay(500, 1500); // Random delay between 500ms and 1500ms
         }
     }
 
@@ -48,37 +52,10 @@ async function main() {
     main();
 }
 
-async function cancelBidsMoreThan(openOrders: any[], price: number) {
-    let promises: any[] = [];
-    openOrders.map(o => {
-        if (o.side === "buy" && (o.price > price || Math.random() < 0.1)) {
-            promises.push(axios.delete(`${BASE_URL}/api/v1/order`, {
-                data: {
-                    orderId: o.orderId,
-                    market: MARKET
-                }
-            }));
-        }
-    });
-    await Promise.all(promises);
-    return promises.length;
-}
-
-async function cancelAsksLessThan(openOrders: any[], price: number) {
-    let promises: any[] = [];
-    openOrders.map(o => {
-        if (o.side === "sell" && (o.price < price || Math.random() < 0.5)) {
-            promises.push(axios.delete(`${BASE_URL}/api/v1/order`, {
-                data: {
-                    orderId: o.orderId,
-                    market: MARKET
-                }
-            }));
-        }
-    });
-
-    await Promise.all(promises);
-    return promises.length;
+// Function to create a random delay between min and max milliseconds
+function delay(min: number, max: number) {
+    const timeout = Math.floor(Math.random() * (max - min + 1) + min);
+    return new Promise(resolve => setTimeout(resolve, timeout));
 }
 
 main();

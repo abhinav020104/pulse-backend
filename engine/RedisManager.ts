@@ -32,7 +32,9 @@ export class RedisManager {
     private static instance: RedisManager;
 
     constructor() {
-        this.client = createClient();
+        this.client = createClient({
+            url: 'redis://redis:6379'
+        });
         this.client.connect();
     }
 
@@ -49,11 +51,13 @@ export class RedisManager {
 
     public publishMessage(channel: string, message: WsMessage) {
         // console.log("publishing message");
-        // console.log(message);
+        console.log(channel);
+        console.log(message);
         this.client.publish(channel, JSON.stringify(message));
     }
 
     public sendToApi(clientId: string, message: MessageToApi) {
+        console.log("here");
         this.client.publish(clientId, JSON.stringify(message));
     }
 }
