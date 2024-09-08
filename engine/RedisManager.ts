@@ -33,7 +33,7 @@ export class RedisManager {
 
     constructor() {
         this.client = createClient({
-            url: 'redis://redis:6379'
+            // url: 'redis://redis:6379'
         });
         this.client.connect();
     }

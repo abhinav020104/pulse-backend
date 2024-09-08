@@ -9,11 +9,11 @@ export class RedisManager{
 
     private constructor(){
         this.client = createClient({
-            url: 'redis://redis:6379'
+            // url: 'redis://redis:6379'
         });
         this.client.connect(); 
         this.publisher = createClient({
-            url: 'redis://redis:6379'
+            // url: 'redis://redis:6379'
         });
         this.publisher.connect();
     }
