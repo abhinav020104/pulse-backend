@@ -200,7 +200,7 @@ export class Engine{
                         const amount = Number(message.data.avaialableBalance);
                         console.log(typeof(amount));
                         const userBalance = this.balances.get(userId)
-                        if(!userBalance){
+                    if(!userBalance){
                             this.balances.set(userId , {
                                 [BASE_CURRENCY]:{
                                     available:amount,

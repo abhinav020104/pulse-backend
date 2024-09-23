@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = "https://pulse-api-server.codewithabhinav.online";
 const TOTAL_BIDS = 20; // Increase total bids
 const TOTAL_ASK = 10;  // Decrease total asks
 const MARKET = "SOL_USD";
