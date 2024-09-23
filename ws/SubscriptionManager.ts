@@ -5,10 +5,14 @@ export class SubscriptionManager {
     private static instance : SubscriptionManager;
     private subscriptions : Map<string , string[]> = new Map();
     private reverseSubscriptions:Map<string , string[]>= new Map();
-
+    //@ts-ignore
     private redisClient : RedisClientType
     private constructor(){
-        this.redisClient = createClient();
+        //@ts-ignore
+        this.client = createClient({
+            url: 'redis://13.60.167.37:6379'
+        });
+        //@ts-ignore
         this.redisClient.connect();
     }
 

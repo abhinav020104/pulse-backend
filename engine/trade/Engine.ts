@@ -8,7 +8,7 @@ export const BASE_CURRENCY = "USD";
 
 const pgClient = new Client({
     user: "your_user",
-    host: "localhost",
+    host: "13.60.167.37",
     database: "my_database",
     password: "your_password",
     port: 5432,

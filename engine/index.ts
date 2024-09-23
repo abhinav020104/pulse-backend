@@ -6,7 +6,7 @@ async function main() {
     const engine = new Engine(); 
     console.log("engine-created")
     const redisClient = createClient({
-        //  url: 'redis://redis:6379'
+         url: 'redis://13.60.167.37:6379'
     });
     await redisClient.connect();
     console.log("connected to redis");
